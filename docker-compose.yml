@@ -1,0 +1,21 @@
+version: '3'
+services:
+  proxy:
+    build:
+      context: ./proxy
+    volumes:
+      - ./proxy:/opt/app/
+    ports:
+      - 4040:4040
+    restart: always
+    command: npm start
+  chrome:
+    depends_on:
+      - proxy
+    build:
+      context: ./chrome
+    ports:
+      - 127.0.0.1:9222:9222
+    shm_size: 1024m
+    cap_add:
+      - SYS_ADMIN

@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+  <head>
+    <title></title>
+  </head>
+  <body>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      console.log("up")
+      var socket = io();
+      let request = (req, resp) => {
+        resp(req.query.body)
+      }
+      socket.on('request', function(req){
+        console.log(req.query)
+        request(req, (body) => {
+          socket.emit('response', {body: body, key: req.key})
+        })
+      });
+    </script>
+  </body>
+</html>
