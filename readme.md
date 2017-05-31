@@ -25,4 +25,18 @@ Visit http://localhost:4040/request/ in your browser. You can dynamically alter 
 Chrome debugging information is available at http://localhost:9222/
 
 
+## Dev
 
+### Notes
+
+Might be best to use the debugging protocal for communication with the chrome instances. Need to look into how that works. Maybe there's a performance improvement over regular websockets. 
+
+### Resources
+
+ - https://chromedevtools.github.io/devtools-protocol/
+ - https://github.com/novnc/websockify
+ - https://idea.popcount.org/2017-03-28-sandboxing-lanscape/
+ - https://github.com/golang/go/issues/18892
+ - https://github.com/google/lovefield  
+ - https://github.com/yukinying/chrome-headless-browser-docker
+ - https://github.com/websockets/ws
