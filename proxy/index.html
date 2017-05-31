@@ -9,7 +9,11 @@
       console.log("up")
       var socket = io();
       let request = (req, resp) => {
-        resp(req.query.body)
+        // USER DEFINED
+
+        resp(req.query.body || " ")
+
+        // END USER DEFINED
       }
       socket.on('request', function(req){
         console.log(req.query)
