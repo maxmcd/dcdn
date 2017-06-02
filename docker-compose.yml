@@ -25,6 +25,7 @@ services:
     ports:
       - 127.0.0.1:9222:9222
       - 4040:4040
+      - 4041:4041
     volumes:
       - ./dcdn:/go/src/github.com/maxmcd/dcdn/dcdn/
     shm_size: 1024m

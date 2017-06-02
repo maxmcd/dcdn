@@ -49,5 +49,5 @@ COPY . /go/src/github.com/maxmcd/dcdn/dcdn/
 
 RUN dep ensure
 
-ENTRYPOINT ["sleep", "1000"]
+ENTRYPOINT ["sleep", "10000"]
 
