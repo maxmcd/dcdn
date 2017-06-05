@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+    <head>
+        <title></title>
+    </head>
+    <body>
+        <script>
+
+            function getKey(array) { // buffer is an ArrayBuffer
+                var array = array.slice(0,20)
+                return Array.prototype.map.call(
+                    array, 
+                    x => ('00' + x.toString(16)).slice(-2)
+                ).join('');
+            }
+
+            let ws = new WebSocket("ws://" + document.location.host + "/ws");
+            ws.binaryType = "arraybuffer"
+            ws.onclose = function (evt) {
+                console.log("websocket connection closed")
+            };
+
+            ws.onmessage = function (evt) {
+                if (evt.data instanceof ArrayBuffer) {
+                    var array = new Uint8Array(evt.data)
+                    var key = getKey(array)
+                    var chunk = new TextDecoder("utf-8").decode(array.slice(20));
+                } else {
+                    var request = JSON.parse(evt.data)
+                    
+                }
+                ws.send(JSON.stringify({
+                    key: key,
+                    info: {
+                        headers: {},
+                        status: 200,
+                        body: "Hello World",
+                    },
+                }))
+                console.log("sent")
+            };
+            ws.onopen = function () {
+                // ws.send("hi")
+            }
+        </script>
+    </body>
+</html>

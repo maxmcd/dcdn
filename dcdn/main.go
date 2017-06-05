@@ -18,10 +18,59 @@ import (
 	"github.com/wirepair/gcd/gcdapi"
 )
 
+type websocketMessage struct {
+	messageType int
+	data        []byte
+}
+
+type RequestInfo struct {
+	Headers map[string]string `json:"headers"`
+	Url     string            `json:"url"`
+	Method  string            `json:"method"`
+	Id      string            `json:"id"`
+}
+
+type ResponseInfo struct {
+	Headers map[string]string `json:"headers"`
+	Status  int               `json:"status"`
+	Body    string            `json:"body"`
+}
+type Response struct {
+	Key  string       `json:"key"`
+	Info ResponseInfo `json:"info"`
+}
+
 var upgrader = websocket.Upgrader{}
-var conn *websocket.Conn
+var websocketChannel chan websocketMessage
+var requests = map[string](chan ResponseInfo){}
+var lock = sync.RWMutex{}
+
+func writeRequest(key string) (reqChannel chan ResponseInfo) {
+	reqChannel = make(chan ResponseInfo, 1)
+	lock.Lock()
+	defer lock.Unlock()
+	requests[key] = reqChannel
+	return reqChannel
+}
+
+func getRequestChannel(key string) (reqChannel chan ResponseInfo) {
+	lock.RLock()
+	defer lock.RUnlock()
+	return requests[key]
+}
+
+func deleteRequest(key string) {
+	lock.Lock()
+	defer lock.Unlock()
+	delete(requests, key)
+}
+
+func init() {
+	websocketChannel = make(chan websocketMessage, 100)
+}
 
 func main() {
+
 	// launchBrowserAndDebugger("http://0.0.0.0:4041")
 	go launchApplication()
 	launchDriver()
@@ -55,13 +104,6 @@ func launchDriver() {
 	log.Fatal(srv.ListenAndServe())
 }
 
-type RequestInfo struct {
-	Headers map[string]string `json:"headers"`
-	Url     string            `json:"url"`
-	Method  string            `json:"method"`
-	Id      string            `json:"id"`
-}
-
 func driverHandler(w http.ResponseWriter, r *http.Request) {
 	var requestInfo RequestInfo
 	requestInfo.Url = r.URL.String()
@@ -81,95 +123,81 @@ func driverHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("error:", err)
 	}
 	hexStrId := hex.EncodeToString(id)
-	print(id)
-	print(hexStrId)
 
-	var total int
-	for {
-		chunk := make([]byte, 1500)
-		n, err := r.Body.Read(chunk)
-		total += n
-		print(len(chunk))
-		print(n)
-		print("---")
-		// TODO: limit chunk size by length
-		toSend := append(id, chunk...)
-		conn.WriteMessage(websocket.BinaryMessage, toSend)
-		if err == io.EOF {
-			break
+	go func() {
+		var total int
+		for {
+			// decide what the optimal size is here
+			chunk := make([]byte, 1500)
+			n, err := r.Body.Read(chunk)
+			total += n
+			print(len(chunk))
+			print(n)
+			print("---")
+			// TODO: limit chunk size by length
+			toSend := append(id, chunk...)
+			message := websocketMessage{
+				messageType: websocket.BinaryMessage,
+				data:        toSend,
+			}
+			websocketChannel <- message
+			if err == io.EOF {
+				break
+			}
 		}
+		print(total)
+	}()
+
+	reqChannel := writeRequest(hexStrId)
+	defer deleteRequest(hexStrId)
+
+	resp := <-reqChannel
+	for k, v := range resp.Headers {
+		w.Header().Add(k, v)
 	}
-	print(total)
-	w.Write([]byte(`Hello World`))
+	w.WriteHeader(resp.Status)
+	w.Write([]byte(resp.Body))
 }
 
 func userCodeHandler(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte(`
-<!doctype html>
-<html>
-    <head>
-        <title></title>
-    </head>
-    <body>
-        <script>
-
-            function getKey(array) { // buffer is an ArrayBuffer
-                var array = array.slice(0,20)
-                return Array.prototype.map.call(array, x => ('00' + x.toString(16)).slice(-2)).join('');
-            }
-
-            let ws = new WebSocket("ws://" + document.location.host + "/ws");
-            ws.binaryType = "arraybuffer"
-            ws.onclose = function (evt) {
-                var item = document.createElement("div");
-                item.innerHTML = "<b>Connection closed.</b>";
-                appendLog(item);
-            };
-            ws.onmessage = function (evt) {
-                console.log(evt)
-                console.log(evt.data)
-                var array = new Uint8Array(evt.data)
-                console.log(array)
-                var key = getKey(array)
-                console.log(key)
-                var string = new TextDecoder("utf-8").decode(array.slice(20));
-                console.log(string)
-                var dv = new DataView(evt.data, 0);
-                console.log(dv.getInt8(0))
-                // console.log(evt.data)
-                // console.log(evt.data[0])
-            };
-            console.log("whatever yo")
-            ws.onopen = function () {
-                ws.send("hi")
-            }
-        </script>
-    </body>
-</html>
-    `))
+	http.ServeFile(w, r, "./index.html")
 }
 
 func websocketHandler(w http.ResponseWriter, r *http.Request) {
-	var err error
-	conn, err = upgrader.Upgrade(w, r, nil)
+	conn, err := upgrader.Upgrade(w, r, nil)
 	print("websocket connected")
 	if err != nil {
 		log.Println("error upgrading:", err)
 		return
 	}
 	defer conn.Close()
-	for {
-		mt, message, err := conn.ReadMessage()
-		if err != nil {
-			log.Println("read:", err)
-			break
+	go func() {
+		for {
+			print("YO")
+			mt, message, err := conn.ReadMessage()
+			_, _ = mt, message
+			fmt.Println(string(message))
+			print("YO!")
+			var resp Response
+			err = json.Unmarshal(message, &resp)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+			reqChannel := getRequestChannel(resp.Key)
+			reqChannel <- resp.Info
+			if err != nil {
+				log.Println("read:", err)
+				break
+			}
 		}
-		log.Printf("recv: %s", message)
-		print(mt)
-		err = conn.WriteMessage(mt, message)
+	}()
+	for {
+		toSend := <-websocketChannel
+		err = conn.WriteMessage(toSend.messageType, toSend.data)
 		if err != nil {
 			log.Println("write:", err)
-			break
+			continue
 		}
 	}
 }
@@ -245,7 +273,7 @@ func launchBrowserAndDebugger(location string) (debugger *gcd.Gcd) {
 		if err != nil {
 			log.Fatalf("error unmarshalling event data: %v\n", err)
 		}
-		log.Printf("Console log: %s\n", msg.Params.Message)
+		log.Printf("Console log: %s\n", msg.Params.Message.Text)
 	})
 
 	target.Subscribe("Runtime.exceptionThrown", func(target *gcd.ChromeTarget, v []byte) {
@@ -255,7 +283,11 @@ func launchBrowserAndDebugger(location string) (debugger *gcd.Gcd) {
 		if err != nil {
 			log.Fatalf("error unmarshalling event data: %v\n", err)
 		}
-		log.Printf("Console log: %#v\n", msg.Params.ExceptionDetails)
+		log.Printf(
+			"Error: %s %s\n",
+			msg.Params.ExceptionDetails.Text,
+			msg.Params.ExceptionDetails.Exception.Description,
+		)
 	})
 
 	runtime.Enable()

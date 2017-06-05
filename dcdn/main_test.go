@@ -48,5 +48,5 @@ func TestSingleRequest(t *testing.T) {
 	if string(bytes) != "Hello World" {
 		t.Fatalf("not a hello")
 	}
-	time.Sleep(time.Second * 10)
+	time.Sleep(time.Second * 300)
 }
