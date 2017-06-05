@@ -63,3 +63,5 @@ Re-implementing `socket.io` with `ws` led to an incredibly small performance imp
  - https://github.com/yukinying/chrome-headless-browser-docker
  - https://github.com/websockets/ws
  - https://github.com/wirepair/gcd
+ - http://peter.sh/experiments/chromium-command-line-switches/?date=2015-05-14#disable-web-security
+ - https://cs.chromium.org/chromium/src/headless/app/headless_shell_switches.cc
