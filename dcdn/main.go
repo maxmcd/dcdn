@@ -27,7 +27,8 @@ type RequestInfo struct {
 	Headers map[string]string `json:"headers"`
 	Url     string            `json:"url"`
 	Method  string            `json:"method"`
-	Id      string            `json:"id"`
+	Key     string            `json:"key"`
+	HasBody bool              `json:"hasBody"`
 }
 
 type ResponseInfo struct {
@@ -117,6 +118,11 @@ func driverHandler(w http.ResponseWriter, r *http.Request) {
 		requestInfo.Headers[k] = v[0]
 	}
 
+	if requestInfo.Headers["Content-Length"] != "" {
+		requestInfo.HasBody = true
+	}
+
+	print(requestInfo.Headers)
 	id := make([]byte, 20)
 	_, err := rand.Read(id)
 	if err != nil {
@@ -124,29 +130,50 @@ func driverHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	hexStrId := hex.EncodeToString(id)
 
-	go func() {
-		var total int
-		for {
-			// decide what the optimal size is here
-			chunk := make([]byte, 1500)
-			n, err := r.Body.Read(chunk)
-			total += n
-			print(len(chunk))
-			print(n)
-			print("---")
-			// TODO: limit chunk size by length
-			toSend := append(id, chunk...)
-			message := websocketMessage{
-				messageType: websocket.BinaryMessage,
-				data:        toSend,
+	requestInfo.Key = hexStrId
+	messageBytes, err := json.Marshal(requestInfo)
+	if err != nil {
+		fmt.Println("error:", err)
+	}
+	message := websocketMessage{
+		messageType: websocket.TextMessage,
+		data:        messageBytes,
+	}
+	websocketChannel <- message
+
+	if requestInfo.HasBody {
+		go func() {
+			var total int
+			for {
+				// decide what the optimal size is here
+				chunk := make([]byte, 1500)
+				n, err := r.Body.Read(chunk)
+				total += n
+
+				if n > 0 {
+					toSend := append(id, chunk[:n]...)
+					message := websocketMessage{
+						messageType: websocket.BinaryMessage,
+						data:        toSend,
+					}
+					websocketChannel <- message
+				}
+				if err == io.EOF {
+					// TODO:
+					// this seems very poor
+					// lets figure out a better way to do
+					// this
+					message := websocketMessage{
+						messageType: websocket.BinaryMessage,
+						data:        append(id, []byte("EOF")...),
+					}
+					websocketChannel <- message
+					break
+				}
 			}
-			websocketChannel <- message
-			if err == io.EOF {
-				break
-			}
-		}
-		print(total)
-	}()
+			print(total)
+		}()
+	}
 
 	reqChannel := writeRequest(hexStrId)
 	defer deleteRequest(hexStrId)
@@ -171,13 +198,12 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.Close()
+
 	go func() {
 		for {
-			print("YO")
 			mt, message, err := conn.ReadMessage()
 			_, _ = mt, message
 			fmt.Println(string(message))
-			print("YO!")
 			var resp Response
 			err = json.Unmarshal(message, &resp)
 			if err != nil {
@@ -192,6 +218,7 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}()
+
 	for {
 		toSend := <-websocketChannel
 		err = conn.WriteMessage(toSend.messageType, toSend.data)

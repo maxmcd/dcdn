@@ -5,6 +5,7 @@
     </head>
     <body>
         <script>
+            var requests = {}
 
             function getKey(array) { // buffer is an ArrayBuffer
                 var array = array.slice(0,20)
@@ -14,6 +15,63 @@
                 ).join('');
             }
 
+            class App {
+                // partially stolen
+                // https://github.com/expressjs/express/blob/master/lib/application.js
+                use(fn) {
+                }
+            }
+
+            class Request {
+                constructor(requestInfo) {
+                    this.events = {}
+                    this._requestInfo = requestInfo
+
+                    this.headers = requestInfo.headers
+                    this.url = requestInfo.url
+                    this.method = requestInfo.method
+
+                    requests[this.requestInfo.key] = this
+                }
+                on(event, callback) {
+                    if (!this.events[event]) {
+                        this.events[event] = []
+                    }
+                    this.events[event].push(callback)
+                }
+                emit(event, data) {
+                    var toCall = this.events[event] || []
+                    for (var i=0; i<toCall.length; i++) {
+                        toCall[i](data)
+                    }
+                }
+            }
+
+            class Response {
+                constructor(key, ws) {
+                    this.key = key
+                    this.ws = ws
+                    this.headers = {}
+                    this.status = 200
+                }
+                status(value) {
+                    this.status = value
+                }
+                set(field, value) {
+
+                }   
+                send(body) {
+                    this.ws.send(JSON.stringify({
+                        key: this.key,
+                        info: {
+                            headers: this.headers,
+                            status: this.status,
+                            body: body,
+                        },
+                    }))
+                }
+            }
+
             let ws = new WebSocket("ws://" + document.location.host + "/ws");
             ws.binaryType = "arraybuffer"
             ws.onclose = function (evt) {
@@ -21,26 +79,42 @@
             };
 
             ws.onmessage = function (evt) {
+                console.log(evt)
                 if (evt.data instanceof ArrayBuffer) {
                     var array = new Uint8Array(evt.data)
                     var key = getKey(array)
                     var chunk = new TextDecoder("utf-8").decode(array.slice(20));
+                    console.log(chunk)
+                    var req = requests[key]
+                    if (req) {
+                        if (chunk === "EOF") {
+                            req.emit('end')
+                        } else {
+                            req.emit('data', chunk)
+                        }
+                    }
                 } else {
-                    var request = JSON.parse(evt.data)
-                    
+                    var requestInfo = JSON.parse(evt.data)
+                    req = new Request(requestInfo)
+                    res = new Response(requestInfo.key, ws)
+                    request(req, res)
+                    if (!requestInfo.hasBody) {
+                        req.emit('end')
+                    }
                 }
-                ws.send(JSON.stringify({
-                    key: key,
-                    info: {
-                        headers: {},
-                        status: 200,
-                        body: "Hello World",
-                    },
-                }))
-                console.log("sent")
             };
             ws.onopen = function () {
                 // ws.send("hi")
+            }
+
+            var request = function(req, res) {
+                var body 
+                req.on('data', function (chunk) {
+                    body += chunk
+                });
+                req.on('end', function() {
+                    res.send("Hello World")    
+                })
             }
         </script>
     </body>

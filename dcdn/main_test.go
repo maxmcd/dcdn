@@ -32,11 +32,15 @@ func TestSingleRequest(t *testing.T) {
 	// emptyBytes := make([]byte, 10000)
 	// _ = emptyBytes
 	message := []byte(`adfasdfajsdlfkjasl;dfkj as;ldkf jas;ldfjk asdf`)
+
+	now := time.Now()
 	resp, err := http.Post(
 		"http://0.0.0.0:4040/",
 		"text/plain",
 		bytes.NewBuffer(message),
 	)
+	elapsed := time.Since(now)
+	print(elapsed.Seconds())
 	// resp, err := http.Get(
 	// 	"http://0.0.0.0:4040/",
 	// )
