@@ -31,3 +31,12 @@ services:
     shm_size: 1024m
     cap_add:
       - SYS_ADMIN
+
+  cockroach:
+      ports:
+          - 8080:8080
+          - 26257:26257
+      volumes:
+          - ./data/cockroach:/cockroach/cockroach-data
+      image: cockroachdb/cockroach:latest
+      command: start --insecure --http-host=0.0.0.0 --host=0.0.0.0

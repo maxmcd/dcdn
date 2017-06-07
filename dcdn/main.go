@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -17,6 +18,8 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/wirepair/gcd"
 	"github.com/wirepair/gcd/gcdapi"
+
+	_ "github.com/lib/pq"
 )
 
 type websocketMessage struct {
@@ -56,6 +59,15 @@ func main() {
 	// launchBrowserAndDebugger("http://0.0.0.0:4041")
 	go launchApplication()
 	launchDriver()
+}
+
+func connectToDB() (db *sql.DB) {
+	var err error
+	db, err = sql.Open("postgres", "postgres://root@cockroach:26257?sslmode=disable")
+	if err != nil {
+		log.Fatal(err)
+	}
+	return db
 }
 
 func writeRequest(key string) (reqChannel chan ResponseInfo) {

@@ -77,3 +77,11 @@ func TestSingleRequest(t *testing.T) {
 	}
 	time.Sleep(time.Minute * 1)
 }
+
+func TestConnectToDB(t *testing.T) {
+	db := connectToDB()
+	result, err := db.Exec("create database dcdn")
+	print(result)
+	print(err)
+
+}
