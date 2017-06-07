@@ -309,6 +309,8 @@ func launchBrowserAndDebugger(location string) (debugger *gcd.Gcd) {
 		"--remote-debugging-address=0.0.0.0", // redundant?
 		"--remote-debugging-port=9222",       // redundant?
 		"--user-data-dir=/data",              // redundant?
+		// user-data-dir will tie chrome processes together, consider making this
+		// dyanmic
 	})
 	debugger.StartProcess(
 		"/usr/bin/google-chrome-unstable",

@@ -1,14 +1,19 @@
 # DCDN
 
+
+## Overview
+
 Web server requests handled within a chrome browser runtime.
 
-A headless chrome web server runs in a docker container. A simple NodeJS server runs in a different container. The Node server handles all public requests.
+A headless chrome browser is launched. Two web servers are launched. One to serve an html page to the browser, another to proxy external requests.
 
-![](request-diagram.png?1 "Optional title")
+External requests are proxied from the web server to the browser environment through a websocket connection. Client code is executed in the browser environment and the response is returned via the websocket connection.
+
+![](request-diagram.png?1 "")
 
 The request flow is as follows:
 
-1. A request is received by the Node server
+1. A request is received by the proxy server
 2. The request information is gathered and sent to an active chrome browser session through a websocket connection. 
 3. In the browser session, the request information is passed to a user-defined function. The user may define any external libraries and custom code they would like to use to process the request.
 4. The response body and headers are sent back to the node server in another websocket request.
@@ -20,28 +25,17 @@ The request flow is as follows:
 docker-compose up
 ```
 
-Visit http://localhost:4040/request/ in your browser. You can dynamically alter the response body with the `body` url parameter: http://localhost:4040/request/?body=foo
-
-Chrome debugging information is available at http://localhost:9222/
-
-
 ## Dev
 
-### Notes
+### Performance In The Browser
 
-#### Performance In The Browser
+It seems that at the moment the single threaded nature of the browser is the main blocker. Need to explore using multiple tabs. 
 
-Seems useful to have multiple requests feed to the same browser session. Concurrent requests lead to an expected slow-down when being fed to the browser. Requests that take 3ms without concurrent traffic take up to 100ms when 50 concurrent requests are fed to the same browser instance. I guess even WASM wouldn't help here as websockets seem to be the bottleneck. 
+Memory consumption might be a bigger issue, each chrome instance launches 3 or 4 instance of chrome. Using multiple tabs would help alleviate this issue. Although the security of hosting code from different users in the same browser session is potentially problematic. 
 
-Might be best to use the debugging protocol for communication with the chrome instances. Need to look into how that works. Maybe there's a performance improvement over regular websockets. 
+If the browser is the real target and the sandbox is not extracted from the chromium project it might be worth exploring WebRTC.
 
-A single browser instance is helpful for simplicity and for allowing a user to share memory. So we can either keep the memory sharing model and have an upper performance threshold, or provide access to a simple shared datastore between instances and recommend no memory sharing. Likely a decision to be made later on. 
-
-#### Websocket performance
-
-Re-implementing `socket.io` with `ws` led to an incredibly small performance improvment, so we're sticking with `socket.io` for now.
-
-#### Structure
+### Structure
 
 **Request Driver:** Handles the inbound request and passes it off to the websocket. In the beginning we'll just use something very simple here, but could be expanded to support udp, tcp, and other kinds of network requests.
 
@@ -49,9 +43,26 @@ Re-implementing `socket.io` with `ws` led to an incredibly small performance imp
 
 **Hosting Structure:** Very open-ended, could go with the Dynamic CDN route, could allow dynamic scaling, could hide it all away, could provide full control. 
 
-**Datastore:** Sharing a single browser session allows for memory sharing. Should likely just provide a stubbed localstorage, or other tools to easy handle data persistence between sessions. Would allow for more flexibility with scaling and managing requests. 
+**Datastore:** Sharing a single browser session allows for memory sharing. Might not be the best to advertise this feature. A globally available key>value store seems like a good option to provide to users. Beyond that a globally available SQL database like cockroach might be a good call. Hosting a DB instance for each install is problematic. A global dictionary store or KV store allows for simpler horizontal scaling between users.
 
+### Suggested Architecture
 
+Writing code for this application involved adopting an entire new stack. I don't think it's enough that these environments are lightweight. Lambda wins because you can re-use code, not just because of scale ease. With that in mind it might be worth it to just focus on the use-case of a dynamic CDN.
+
+With a dynamic CDN we would want:
+
+- Quick deploys to many nodes around the world
+- Globally available datastore for some data needs
+- Low latency is very important
+
+Container orchestration could be handled in each region by Kubernetes. The datastore could be K/V at first. Voldemort, cloud datastore, are candidates. Might be good to start with a managed solution.
+
+A deploy would:
+
+ - Accept user code and write it to some persistent datastore
+ - Allocate an endpoint to that code
+ - Application running in all regions would consume the new endpoint and details
+ - A node would be spun up for the application in all regions.
 
 ### Resources
 
