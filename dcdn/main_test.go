@@ -2,39 +2,21 @@ package main
 
 import (
 	"bytes"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"testing"
 	"time"
 )
 
-func TestSingleRequest(t *testing.T) {
-	go launchApplication()
-	go launchDriver()
-
-	for {
-		resp, err := quickGet("http://localhost:4041/")
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
-		if resp.StatusCode == 200 {
-			break
-		} else {
-			time.Sleep(time.Millisecond * 100)
-		}
-	}
-
-	debugger := launchBrowserAndDebugger("http://0.0.0.0:4041")
-	defer debugger.ExitProcess()
-
+func postRequest(t *testing.T) (resp *http.Response) {
 	// emptyBytes := make([]byte, 10000)
 	// _ = emptyBytes
 	message := []byte(`adfasdfajsdlfkjasl;dfkj as;ldkf jas;ldfjk asdf`)
 
 	now := time.Now()
-	resp, err := http.Post(
+
+	var err error
+	resp, err = http.Post(
 		"http://0.0.0.0:4040/",
 		"text/plain",
 		bytes.NewBuffer(message),
@@ -42,15 +24,56 @@ func TestSingleRequest(t *testing.T) {
 	elapsed := time.Since(now)
 	print(elapsed.Seconds())
 	// resp, err := http.Get(
-	// 	"http://0.0.0.0:4040/",
+	//  "http://0.0.0.0:4040/",
 	// )
 	if err != nil {
 		t.Error(err)
 	}
+	return resp
+}
+
+func TestSingleWithDebuggerRequest(t *testing.T) {
+
+	srvA, srvD := fullyLaunchServers()
+	defer srvA.Shutdown(nil)
+	defer srvD.Shutdown(nil)
+
+	debugger := launchBrowserAndDebugger("http://0.0.0.0:4041")
+	defer debugger.ExitProcess()
+
+	resp := postRequest(t)
 	bytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Error(err)
+	}
 	print(string(bytes))
 	if string(bytes) != "Hello World" {
 		t.Fatalf("not a hello")
 	}
-	time.Sleep(time.Second * 300)
+	time.Sleep(time.Minute * 1)
+}
+
+func TestSingleRequest(t *testing.T) {
+
+	srvA, srvD := fullyLaunchServers()
+	defer srvA.Shutdown(nil)
+	defer srvD.Shutdown(nil)
+
+	cmd, err := launchBrowser("http://0.0.0.0:4041")
+	if err != nil {
+		t.Error(err)
+	}
+	time.Sleep(1 * time.Second)
+	defer cmd.Process.Kill()
+
+	resp := postRequest(t)
+	bytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Error(err)
+	}
+	print(string(bytes))
+	if string(bytes) != "Hello World" {
+		t.Fatalf("not a hello")
+	}
+	time.Sleep(time.Minute * 1)
 }

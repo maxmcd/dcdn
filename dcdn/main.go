@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
 	"sync"
 	"time"
@@ -46,6 +47,17 @@ var websocketChannel chan websocketMessage
 var requests = map[string](chan ResponseInfo){}
 var lock = sync.RWMutex{}
 
+func init() {
+	websocketChannel = make(chan websocketMessage, 100)
+}
+
+func main() {
+
+	// launchBrowserAndDebugger("http://0.0.0.0:4041")
+	go launchApplication()
+	launchDriver()
+}
+
 func writeRequest(key string) (reqChannel chan ResponseInfo) {
 	reqChannel = make(chan ResponseInfo, 1)
 	lock.Lock()
@@ -66,43 +78,62 @@ func deleteRequest(key string) {
 	delete(requests, key)
 }
 
-func init() {
-	websocketChannel = make(chan websocketMessage, 100)
+func fullyLaunchServers() (srvA *http.Server, srvD *http.Server) {
+	now := time.Now()
+	srvA = launchApplication()
+	srvD = launchDriver()
+
+	for {
+		// TODO: add endpoint for testing driver?
+		resp, err := quickGet("http://localhost:4041/")
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+		if resp.StatusCode == 200 {
+			break
+		} else {
+			time.Sleep(time.Millisecond * 100)
+		}
+	}
+	elapsed := time.Since(now)
+	fmt.Printf("Launching servers took %f seconds.\n", elapsed.Seconds())
+
+	return
 }
 
-func main() {
-
-	// launchBrowserAndDebugger("http://0.0.0.0:4041")
-	go launchApplication()
-	launchDriver()
-}
-
-func launchApplication() {
+func launchApplication() (srv *http.Server) {
 	r := mux.NewRouter()
 	r.HandleFunc("/", userCodeHandler)
 	r.HandleFunc("/ws", websocketHandler)
 	port := "4041"
-	srv := &http.Server{
+	srv = &http.Server{
 		Handler:      r,
 		Addr:         "0.0.0.0:" + port,
 		WriteTimeout: 15 * time.Second,
 		ReadTimeout:  15 * time.Second,
 	}
 	fmt.Println("websocket comm listening on " + port)
-	log.Fatal(srv.ListenAndServe())
+	go func() {
+		log.Println(srv.ListenAndServe())
+	}()
+	return srv
 }
 
-func launchDriver() {
+func launchDriver() (srv *http.Server) {
 	handler := http.HandlerFunc(driverHandler)
 	port := "4040"
-	srv := &http.Server{
+	srv = &http.Server{
 		Handler:      handler,
 		Addr:         "0.0.0.0:" + port,
 		WriteTimeout: 15 * time.Second,
 		ReadTimeout:  15 * time.Second,
 	}
 	fmt.Println("driver listening on " + port)
-	log.Fatal(srv.ListenAndServe())
+	go func() {
+		log.Println(srv.ListenAndServe())
+	}()
+	return srv
 }
 
 func driverHandler(w http.ResponseWriter, r *http.Request) {
@@ -241,18 +272,29 @@ func quickGet(url string) (resp *http.Response, err error) {
 	return client.Get(url)
 }
 
-func launchBrowser(location string) {
-	// this might be helpful in the future to avoid the overhead
-	// of the debugger, but for now headless chrome exits the
-	// moment the dom is ready.
-	cmd := exec.Command(
+func launchBrowser(location string) (cmd *exec.Cmd, err error) {
+	// unclear if this is better
+	// both open 4 chrome processes
+	// if you run the process headless without a debugger port it opens 3.
+	// so tab, browser view, and something else
+	// debugger is one chrome process
+	// hmm
+
+	// does not occupy debugging port, gcd does
+	cmd = exec.Command(
 		"/usr/bin/google-chrome-unstable",
 		"--headless",
 		"--disable-gpu",
-		"--dump-dom",
+		"--disable-web-security",
+		"--remote-debugging-address=0.0.0.0",
+		"--remote-debugging-port=9222",
+		"--user-data-dir=/data",
 		location,
 	)
-	cmd.Run()
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err = cmd.Start()
+	return cmd, err
 }
 
 func launchBrowserAndDebugger(location string) (debugger *gcd.Gcd) {
