@@ -63,11 +63,27 @@ func main() {
 
 func connectToDB() (db *sql.DB) {
 	var err error
-	db, err = sql.Open("postgres", "postgres://root@cockroach:26257?sslmode=disable")
+	db, err = sql.Open("postgres", "postgres://root@cockroach:26257/dcdn?sslmode=disable")
 	if err != nil {
 		log.Fatal(err)
 	}
 	return db
+}
+
+func createAppTable(db *sql.DB) (nameHex string, err error) {
+	name := make([]byte, 15)
+	_, err = rand.Read(name)
+	if err != nil {
+		fmt.Println("error:", err)
+	}
+	nameHex = "appKV_" + hex.EncodeToString(name)
+
+	_, err = db.Exec(fmt.Sprintf("CREATE TABLE %s (key TEXT UNIQUE, value TEXT)", nameHex))
+	// retry if duplicate table
+	if err != nil {
+		return
+	}
+	return
 }
 
 func writeRequest(key string) (reqChannel chan ResponseInfo) {

@@ -80,8 +80,9 @@ func TestSingleRequest(t *testing.T) {
 
 func TestConnectToDB(t *testing.T) {
 	db := connectToDB()
-	result, err := db.Exec("create database dcdn")
-	print(result)
-	print(err)
-
+	name, err := createAppTable(db)
+	print(name)
+	if err != nil {
+		t.Error(err)
+	}
 }
