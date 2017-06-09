@@ -6,12 +6,14 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 func postRequest(t *testing.T) (resp *http.Response) {
 	// emptyBytes := make([]byte, 10000)
 	// _ = emptyBytes
-	message := []byte(`adfasdfajsdlfkjasl;dfkj as;ldkf jas;ldfjk asdf`)
+	message := []byte(`This is a request body.`)
 
 	now := time.Now()
 
@@ -33,6 +35,7 @@ func postRequest(t *testing.T) (resp *http.Response) {
 }
 
 func TestSingleWithDebuggerRequest(t *testing.T) {
+	t.Skip()
 
 	srvA, srvD := fullyLaunchServers()
 	defer srvA.Shutdown(nil)
@@ -50,11 +53,10 @@ func TestSingleWithDebuggerRequest(t *testing.T) {
 	if string(bytes) != "Hello World" {
 		t.Fatalf("not a hello")
 	}
-	time.Sleep(time.Minute * 1)
 }
 
 func TestSingleRequest(t *testing.T) {
-
+	t.Skip()
 	srvA, srvD := fullyLaunchServers()
 	defer srvA.Shutdown(nil)
 	defer srvD.Shutdown(nil)
@@ -72,17 +74,69 @@ func TestSingleRequest(t *testing.T) {
 		t.Error(err)
 	}
 	print(string(bytes))
+
 	if string(bytes) != "Hello World" {
-		t.Fatalf("not a hello")
+		t.Errorf("not a hello")
 	}
 	time.Sleep(time.Minute * 1)
 }
 
-func TestConnectToDB(t *testing.T) {
+func TestDB(t *testing.T) {
 	db := connectToDB()
-	name, err := createAppTable(db)
-	print(name)
+	err := dropAppTable(db, appTableName)
 	if err != nil {
 		t.Error(err)
+	}
+	name, err := createAppTable(db, appTableName)
+	if err != nil {
+		pqErr := err.(*pq.Error)
+		if pqErr.Routine != "NewRelationAlreadyExistsError" {
+			t.Error(err)
+		}
+	}
+	if name != appTableName {
+		t.Errorf("incorrect table name")
+	}
+	err = writeKeyValue(db, appTableName, "foo", "bar")
+	if err != nil {
+		t.Error(err)
+	}
+	value, err := getKeyValue(db, appTableName, "foo")
+	if value != "bar" {
+		t.Errorf("incorrect value for key")
+	}
+	err = writeKeyValue(db, appTableName, "foo", "baz")
+	if err != nil {
+		t.Error(err)
+	}
+	value, err = getKeyValue(db, appTableName, "foo")
+	if value != "baz" {
+		t.Errorf("incorrect value for key")
+	}
+}
+
+func BenchmarkDB(b *testing.B) {
+	db := connectToDB()
+	err := dropAppTable(db, appTableName)
+	if err != nil {
+		b.Error(err)
+	}
+	_, err = createAppTable(db, appTableName)
+	if err != nil {
+		pqErr := err.(*pq.Error)
+		if pqErr.Routine != "NewRelationAlreadyExistsError" {
+			b.Error(err)
+		}
+	}
+
+	for i := 0; i < b.N; i++ {
+		err := writeKeyValue(db, appTableName, "foo", "baz")
+		if err != nil {
+			b.Error(err)
+		}
+		err = writeKeyValue(db, appTableName, "foo", "baz")
+		if err != nil {
+			b.Error(err)
+		}
 	}
 }

@@ -51,15 +51,17 @@
                     this.status = value
                 }
                 set(field, value) {
-
+                    this.headers[field] = value
                 }
                 get(field) {
                     return this.headers[field]
                 }
                 end() {
+                    console.log("callend end")
                     this.send("")
                 }
                 send(body) {
+                    console.log("Sending: ", body)
                     this.ws.send(JSON.stringify({
                         key: this.key,
                         info: {
@@ -75,11 +77,11 @@
             ws.binaryType = "arraybuffer"
 
             ws.onclose = function (evt) {
-                console.log("websocket connection closed")
+                console.log("Websocket connection closed")
             };
 
             ws.onmessage = function (evt) {
-                console.log(evt)
+                console.log(evt.data)
                 if (evt.data instanceof ArrayBuffer) {
                     var array = new Uint8Array(evt.data)
                     var key = getKey(array)
@@ -109,11 +111,13 @@
 
             var request = function(req, res) {
                 var body 
+                res.set('Content-Type','text/plain')
                 req.on('data', function (chunk) {
                     body += chunk
                 });
                 req.on('end', function() {
-                    res.send("Hello World")    
+                    res.send("Hello World")
+                    // res.send(document.getElementsByTagName('body')[0].innerHTML)    
                 })
             }
         </script>

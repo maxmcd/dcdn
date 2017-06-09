@@ -45,20 +45,28 @@ type Response struct {
 	Info ResponseInfo `json:"info"`
 }
 
+type DBRequest struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+	Type  string `json:"type"`
+}
+
 var upgrader = websocket.Upgrader{}
 var websocketChannel chan websocketMessage
 var requests = map[string](chan ResponseInfo){}
+var dbChannel chan DBRequest
 var lock = sync.RWMutex{}
 
+const appTableName = "app_table"
+
 func init() {
+	// arbitrary buffers
 	websocketChannel = make(chan websocketMessage, 100)
+	dbChannel = make(chan DBRequest, 100)
 }
 
 func main() {
-
-	// launchBrowserAndDebugger("http://0.0.0.0:4041")
-	go launchApplication()
-	launchDriver()
+	fmt.Println("hi")
 }
 
 func connectToDB() (db *sql.DB) {
@@ -70,20 +78,69 @@ func connectToDB() (db *sql.DB) {
 	return db
 }
 
-func createAppTable(db *sql.DB) (nameHex string, err error) {
-	name := make([]byte, 15)
-	_, err = rand.Read(name)
-	if err != nil {
-		fmt.Println("error:", err)
-	}
-	nameHex = "appKV_" + hex.EncodeToString(name)
+func dropAppTable(db *sql.DB, tableName string) (err error) {
+	_, err = db.Exec(fmt.Sprintf("DROP TABLE %s", tableName))
+	return
+}
 
-	_, err = db.Exec(fmt.Sprintf("CREATE TABLE %s (key TEXT UNIQUE, value TEXT)", nameHex))
-	// retry if duplicate table
+func createAppTable(db *sql.DB, tableName string) (name string, err error) {
+	if tableName == "" {
+		nameBytes := make([]byte, 15)
+		_, err = rand.Read(nameBytes)
+		if err != nil {
+			fmt.Println("error:", err)
+		}
+		nameHex := "appKV_" + hex.EncodeToString(nameBytes)
+		tableName = nameHex
+	}
+	name = tableName
+	_, err = db.Exec(fmt.Sprintf("CREATE TABLE %s (key TEXT UNIQUE, value TEXT)", tableName))
+	return
+}
+
+func getKeyValue(db *sql.DB, tableName string,
+	key string) (value string, err error) {
+
+	rows, err := db.Query(
+		fmt.Sprintf("SELECT value FROM %s where key=$1", tableName), key)
+	defer rows.Close()
 	if err != nil {
 		return
 	}
+	for rows.Next() {
+		err = rows.Scan(&value)
+		if err != nil {
+			return
+		}
+		return
+	}
 	return
+}
+
+func writeKeyValue(db *sql.DB, tableName string, key string,
+	value string) (err error) {
+
+	_, err = db.Query(fmt.Sprintf(`
+        INSERT INTO 
+            %s(key, value) 
+            VALUES($1, $2)
+        ON CONFLICT (key)
+            DO UPDATE SET value = $2
+        `, tableName), key, value)
+	return
+}
+
+func setUpDatabase() {
+	db := connectToDB()
+	_, err := createAppTable(db, appTableName)
+	print(err)
+	go func() {
+		for {
+			dbRequest := <-dbChannel
+			_ = dbRequest
+			// if dbRequest
+		}
+	}()
 }
 
 func writeRequest(key string) (reqChannel chan ResponseInfo) {
@@ -132,6 +189,9 @@ func fullyLaunchServers() (srvA *http.Server, srvD *http.Server) {
 
 func launchApplication() (srv *http.Server) {
 	r := mux.NewRouter()
+
+	setUpDatabase()
+
 	r.HandleFunc("/", userCodeHandler)
 	r.HandleFunc("/ws", websocketHandler)
 	port := "4041"
@@ -141,7 +201,7 @@ func launchApplication() (srv *http.Server) {
 		WriteTimeout: 15 * time.Second,
 		ReadTimeout:  15 * time.Second,
 	}
-	fmt.Println("websocket comm listening on " + port)
+	fmt.Println("Websocket comm listening on " + port)
 	go func() {
 		log.Println(srv.ListenAndServe())
 	}()
@@ -157,7 +217,7 @@ func launchDriver() (srv *http.Server) {
 		WriteTimeout: 15 * time.Second,
 		ReadTimeout:  15 * time.Second,
 	}
-	fmt.Println("driver listening on " + port)
+	fmt.Println("Driver listening on " + port)
 	go func() {
 		log.Println(srv.ListenAndServe())
 	}()
@@ -181,7 +241,6 @@ func driverHandler(w http.ResponseWriter, r *http.Request) {
 		requestInfo.HasBody = true
 	}
 
-	print(requestInfo.Headers)
 	id := make([]byte, 20)
 	_, err := rand.Read(id)
 	if err != nil {
@@ -230,7 +289,6 @@ func driverHandler(w http.ResponseWriter, r *http.Request) {
 					break
 				}
 			}
-			print(total)
 		}()
 	}
 
@@ -266,9 +324,11 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) {
 			var resp Response
 			err = json.Unmarshal(message, &resp)
 			if err != nil {
+				print(message)
 				fmt.Println(err)
 				continue
 			}
+			print(resp)
 			reqChannel := getRequestChannel(resp.Key)
 			reqChannel <- resp.Info
 			if err != nil {
