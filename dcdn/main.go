@@ -277,15 +277,6 @@ func driverHandler(w http.ResponseWriter, r *http.Request) {
 					websocketChannel <- message
 				}
 				if err == io.EOF {
-					// TODO:
-					// this seems very poor
-					// lets figure out a better way to do
-					// this
-					message := websocketMessage{
-						messageType: websocket.BinaryMessage,
-						data:        append(id, []byte("EOF")...),
-					}
-					websocketChannel <- message
 					break
 				}
 			}
@@ -319,6 +310,10 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		for {
 			mt, message, err := conn.ReadMessage()
+            if err != nil {
+                fmt.Println(err)
+                break
+            }
 			_, _ = mt, message
 			fmt.Println(string(message))
 			var resp Response

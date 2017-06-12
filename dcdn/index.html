@@ -18,6 +18,7 @@
             class Request {
                 constructor(requestInfo) {
                     this.events = {}
+                    this._bytesReceived = 0
                     this._requestInfo = requestInfo
 
                     this.headers = requestInfo.headers
@@ -85,14 +86,20 @@
                 if (evt.data instanceof ArrayBuffer) {
                     var array = new Uint8Array(evt.data)
                     var key = getKey(array)
-                    var chunk = new TextDecoder("utf-8").decode(array.slice(20));
+                    var arrayChunk = array.slice(20)
+                    var dataLength = arrayChunk.length
+                    var chunk = new TextDecoder("utf-8").decode(arrayChunk);
                     console.log(chunk)
                     var req = requests[key]
                     if (req) {
-                        if (chunk === "EOF") {
-                            req.emit('end')
-                        } else {
-                            req.emit('data', chunk)
+                        // TODO: catch the edge cases here if content-length isn't present
+                        contentLength = parseInt(req.headers['Content-Length'])
+                        req._bytesReceived += dataLength
+                        req.emit('data', chunk)
+                        if (contentLength == req._bytesReceived) {
+                            req.emit('end')     
+                            // TODO: how best to clean up requests?
+                            requests[key] = null
                         }
                     }
                 } else {

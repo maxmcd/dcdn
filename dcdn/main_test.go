@@ -13,7 +13,46 @@ import (
 func postRequest(t *testing.T) (resp *http.Response) {
 	// emptyBytes := make([]byte, 10000)
 	// _ = emptyBytes
-	message := []byte(`This is a request body.`)
+	message := []byte(`
+		This is a request body. Let's making it
+		longer than 1500 bytes. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+		Padding. Padding. Padding. Padding. Padding. Padding.
+	`)
 
 	now := time.Now()
 
@@ -56,7 +95,7 @@ func TestSingleWithDebuggerRequest(t *testing.T) {
 }
 
 func TestSingleRequest(t *testing.T) {
-	t.Skip()
+	// t.Skip()
 	srvA, srvD := fullyLaunchServers()
 	defer srvA.Shutdown(nil)
 	defer srvD.Shutdown(nil)
@@ -78,7 +117,7 @@ func TestSingleRequest(t *testing.T) {
 	if string(bytes) != "Hello World" {
 		t.Errorf("not a hello")
 	}
-	time.Sleep(time.Minute * 1)
+	// time.Sleep(time.Minute * 1)
 }
 
 func TestDB(t *testing.T) {
@@ -134,7 +173,7 @@ func BenchmarkDB(b *testing.B) {
 		if err != nil {
 			b.Error(err)
 		}
-		err = writeKeyValue(db, appTableName, "foo", "baz")
+		_, err = getKeyValue(db, appTableName, "foo")
 		if err != nil {
 			b.Error(err)
 		}
